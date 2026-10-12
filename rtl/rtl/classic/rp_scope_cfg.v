@@ -95,8 +95,8 @@ module rp_scope_cfg #(
    output reg [       2-1: 0] irq_mask_o           ,
    output reg [       2-1: 0] irq_clr_o            ,
    output reg [       8-1: 0] split_irq_mask_o     ,
-   output reg [       8-1: 0] split_irq_clr_o
-
+   output reg [       8-1: 0] split_irq_clr_o      ,
+   output reg do_quant_o
 
 );
 
@@ -337,6 +337,7 @@ if (adc_rstn_i == 1'b0) begin
   irq_clr_o              <=  2'b0           ;
   split_irq_mask_o       <=  8'h0           ;
   split_irq_clr_o        <=  8'h0           ;
+  do_quant_o             <=  1'd0           ;
 end else begin
   irq_clr_o <= 2'b0;
   split_irq_clr_o <= 8'h0;
@@ -415,7 +416,7 @@ end else begin
     //if (sys_addr[19:0]==20'h240 )   set_filt_aa[18*4-1:18*3]   <= sys_wdata[18-1:0] ;
     //if (sys_addr[19:0]==20'h244 )   set_filt_bb[25*4-1:25*3]   <= sys_wdata[25-1:0] ;
     //if (sys_addr[19:0]==20'h248 )   set_filt_kk[25*4-1:25*3]   <= sys_wdata[25-1:0] ;
-    //if (sys_addr[19:0]==20'h24C )   set_filt_pp[25*4-1:25*3]   <= sys_wdata[25-1:0] ;
+    if (sys_addr[19:0]==20'h250 )   do_quant_o  <= sys_wdata[0] ;
 
    end
 
@@ -516,6 +517,7 @@ end else begin
     20'h0023C : begin sys_ack <= sys_en;          sys_rdata <= (N_CH > 2) ?    trig_timestamp_i[191:160] : 32'h0 ; end
     20'h00240 : begin sys_ack <= sys_en;          sys_rdata <= (N_CH > 2) ?    trig_timestamp_i[223:192] : 32'h0 ; end
     20'h00244 : begin sys_ack <= sys_en;          sys_rdata <= (N_CH > 2) ?    trig_timestamp_i[255:224] : 32'h0 ; end
+    20'h00250 : begin sys_ack <= sys_en;          sys_rdata <=                  {31'd0, do_quant_o}        ; end
     // removed because for 4ADC channels are mirrored on main address
     //20'h00210 : begin sys_ack <= sys_en;          sys_rdata <= {{32-16{1'b0}},  set_calib_offset[16*3-1:16*2]}  ; end
     //20'h00214 : begin sys_ack <= sys_en;          sys_rdata <= {{32-16{1'b0}},  set_calib_gain[16*3-1:16*2]}    ; end

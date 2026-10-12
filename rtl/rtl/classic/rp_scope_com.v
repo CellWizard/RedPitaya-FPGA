@@ -175,6 +175,7 @@ wire                 sys_en       ;
 
 wire [   4*RSZ-1: 0] adc_wp_act   ;
 wire [    4*DW-1: 0] adc_bram_in  ;
+wire [    4*DW-1: 0] adc_quant_in ;
 wire [       4-1: 0] adc_we       ;
 wire [       4-1: 0] adc_dv_del   ;
 wire [       4-1: 0] adc_dv_bram  ;
@@ -183,6 +184,7 @@ reg  [       4-1: 0] adc_trig_d   ;
 reg  [       4-1: 0] adc_dly_do_ch_d;
 reg  [       2-1: 0] irq_sts      ;
 reg  [       8-1: 0] split_irq_sts;
+wire [N_CH-1:0] do_quant;
 
 assign sys_en = sys_wen | sys_ren;
 
@@ -399,8 +401,27 @@ rp_trig_src #(
   .trg_state_o    ( trg_state[(GV+1)*8-1:GV*8]),
   .adc_trig_o     ( adc_trig[GV]              )
 );
+reg [7:0] adc_bit_counter=8'd0;
+reg [DW-1:0] adc_samp_quant='d0;
+assign adc_dv_bram[GV] = do_quant[GV] ? ((adc_bit_counter==8'd13) && (adc_dv_del[GV]==1)) : adc_dv_del[GV];
+always @ (posedge adc_clk_i[GV] or negedge adc_rstn_i[GV]) begin
+  if (adc_rstn_i[GV]==0) begin
+    adc_bit_counter<=8'd0;
+    adc_samp_quant<='d0;
+  end else begin
+    if (adc_dv_del[GV]==1) begin
+      if (adc_bit_counter==8'd13) begin
+        adc_bit_counter <= 8'd0;
+      end else begin
+        adc_bit_counter <= adc_bit_counter + 8'd1;
+      end
+      adc_samp_quant[adc_bit_counter] <= (adc_bram_in[(GV+1)*DW-1]);
+    end
+  end
 
-assign adc_dv_bram[GV] = adc_dv_del[GV];
+end
+
+assign adc_quant_in[(GV+1)*DW-1:GV*DW]=adc_samp_quant;
 
 rp_bram_sm #(
 ) i_bram_sm (
@@ -440,7 +461,7 @@ rp_acq_bram #(
 
    // Connection to AXI master
   .bram_wp_i      ( adc_wp_act[(GV+1)*RSZ-1:GV*RSZ] ),
-  .bram_dat_i     ( adc_bram_in[(GV+1)*DW-1:GV*DW]  ),
+  .bram_dat_i     ( do_quant[GV] ? adc_quant_in[(GV+1)*DW-1:GV*DW] : adc_bram_in[(GV+1)*DW-1:GV*DW]  ),
   .bram_val_i     ( adc_dv_bram[GV]                 ),
   .bram_we_i      ( adc_we[GV]                      ),
   .bram_ack_i     ( sys_en                          ),
@@ -494,6 +515,7 @@ generate
 for(GM = N_CH ; GM < 4 ; GM = GM + 1) begin // pad out remaining channels
 
 assign adc_bram_in[(GM+1)*DW -1:GM*DW ] = {DW{1'b0}};
+assign adc_quant_in[(GM+1)*DW -1:GM*DW ] = {DW{1'b0}};
 assign adc_dv_del[GM]                   =  1'b0;
 assign adc_dv_bram[GM]                  =  1'b0;
 assign adc_dv_del_p[GM]                 =  1'b0;
@@ -621,7 +643,8 @@ rp_scope_cfg #(
   .irq_mask_o         ( irq_mask        ),
   .irq_clr_o          ( irq_clr         ),
   .split_irq_mask_o   ( split_irq_mask  ),
-  .split_irq_clr_o    ( split_irq_clr   )
+  .split_irq_clr_o    ( split_irq_clr   ),
+  .do_quant_o         ( do_quant[GV]        )
 );
 
 assign axi_clk    = adc_clk_i ;
